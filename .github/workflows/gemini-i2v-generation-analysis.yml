@@ -1,0 +1,281 @@
+name: Gemini Image-to-Video Generation & Analysis
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_prompt:
+        description: '基本生成プロンプト（例：美しい桜の花びらと猫が遊ぶ風景）'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  setup-branch:
+    runs-on: ubuntu-latest
+    outputs:
+      branch_name: ${{ steps.setup.outputs.branch_name }}
+      folder_name: ${{ steps.setup.outputs.folder_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup branch and folder
+        id: setup
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          BRANCH_NAME="video-generation-${TIMESTAMP}"
+          FOLDER_NAME="video-${TIMESTAMP}"
+          
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git checkout -b ${BRANCH_NAME}
+          mkdir -p ${FOLDER_NAME}/planning ${FOLDER_NAME}/images ${FOLDER_NAME}/videos ${FOLDER_NAME}/analysis
+          
+          echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+          echo "folder_name=${FOLDER_NAME}" >> $GITHUB_OUTPUT
+          
+      - name: Commit initial structure
+        run: |
+          touch ${{ steps.setup.outputs.folder_name }}/README.md
+          git add .
+          git commit -m "🎬 Initialize video generation workflow"
+          git push origin ${{ steps.setup.outputs.branch_name }}
+
+  planning:
+    needs: setup-branch
+    runs-on: ubuntu-latest
+    outputs:
+      image_prompt: ${{ steps.plan.outputs.image_prompt }}
+      video_prompt: ${{ steps.plan.outputs.video_prompt }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup-branch.outputs.branch_name }}
+          
+      - name: Setup Gemini
+        uses: anthropics/gemini-setup-action@v1
+        with:
+          api-key: ${{ secrets.GEMINI_API_KEY }}
+          
+      - name: Plan generation strategy
+        id: plan
+        run: |
+          # Gemini AIを使用してプロンプトを最適化
+          gemini code --execute << 'EOF'
+          生成したいコンテンツ: ${{ github.event.inputs.base_prompt }}
+          
+          以下の内容で計画を立ててください：
+          1. 画像生成用の詳細なプロンプト（Imagen4 Fast向け）
+          2. 動画生成用のモーションプロンプト（Hailuo-02 Pro向け）
+          
+          ファイルに保存：
+          - ${{ needs.setup-branch.outputs.folder_name }}/planning/image-prompt.md
+          - ${{ needs.setup-branch.outputs.folder_name }}/planning/video-prompt.md
+          - ${{ needs.setup-branch.outputs.folder_name }}/planning/planning-strategy.md
+          EOF
+          
+          # プロンプトを出力として設定
+          IMAGE_PROMPT=$(cat ${{ needs.setup-branch.outputs.folder_name }}/planning/image-prompt.md | head -n 1)
+          VIDEO_PROMPT=$(cat ${{ needs.setup-branch.outputs.folder_name }}/planning/video-prompt.md | head -n 1)
+          
+          echo "image_prompt=${IMAGE_PROMPT}" >> $GITHUB_OUTPUT
+          echo "video_prompt=${VIDEO_PROMPT}" >> $GITHUB_OUTPUT
+          
+      - name: Commit planning results
+        run: |
+          git add .
+          git commit -m "📝 Add generation planning"
+          git push
+
+  generate-image:
+    needs: [setup-branch, planning]
+    runs-on: ubuntu-latest
+    outputs:
+      image_url: ${{ steps.generate.outputs.image_url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup-branch.outputs.branch_name }}
+          
+      - name: Setup Gemini
+        uses: anthropics/gemini-setup-action@v1
+        with:
+          api-key: ${{ secrets.GEMINI_API_KEY }}
+          
+      - name: Generate image
+        id: generate
+        run: |
+          gemini code --execute << 'EOF'
+          MCP t2i-fal-imagen4-fastを使用して画像を生成：
+          プロンプト: ${{ needs.planning.outputs.image_prompt }}
+          
+          生成した画像を以下に保存：
+          - ${{ needs.setup-branch.outputs.folder_name }}/images/generated-image.jpg
+          - URLを${{ needs.setup-branch.outputs.folder_name }}/images/image-url.txtに保存
+          EOF
+          
+          IMAGE_URL=$(cat ${{ needs.setup-branch.outputs.folder_name }}/images/image-url.txt)
+          echo "image_url=${IMAGE_URL}" >> $GITHUB_OUTPUT
+          
+      - name: Commit image
+        run: |
+          git add .
+          git commit -m "🖼️ Add generated image"
+          git push
+
+  generate-video:
+    needs: [setup-branch, planning, generate-image]
+    runs-on: ubuntu-latest
+    outputs:
+      video_url: ${{ steps.generate.outputs.video_url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup-branch.outputs.branch_name }}
+          
+      - name: Setup Gemini
+        uses: anthropics/gemini-setup-action@v1
+        with:
+          api-key: ${{ secrets.GEMINI_API_KEY }}
+          
+      - name: Generate video
+        id: generate
+        run: |
+          gemini code --execute << 'EOF'
+          MCP i2v-fal-hailuo-02-proを使用して動画を生成：
+          画像URL: ${{ needs.generate-image.outputs.image_url }}
+          プロンプト: ${{ needs.planning.outputs.video_prompt }}
+          
+          生成した動画を以下に保存：
+          - ${{ needs.setup-branch.outputs.folder_name }}/videos/generated-video.mp4
+          - URLを${{ needs.setup-branch.outputs.folder_name }}/videos/video-url.txtに保存
+          EOF
+          
+          VIDEO_URL=$(cat ${{ needs.setup-branch.outputs.folder_name }}/videos/video-url.txt)
+          echo "video_url=${VIDEO_URL}" >> $GITHUB_OUTPUT
+          
+      - name: Commit video
+        run: |
+          git add .
+          git commit -m "🎥 Add generated video"
+          git push
+
+  analyze-video:
+    needs: [setup-branch, generate-video]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup-branch.outputs.branch_name }}
+          
+      - name: Setup Gemini
+        uses: anthropics/gemini-setup-action@v1
+        with:
+          api-key: ${{ secrets.GEMINI_API_KEY }}
+          
+      - name: Analyze video
+        run: |
+          gemini code --execute << 'EOF'
+          Gemini Visionを使用して動画を分析：
+          動画URL: ${{ needs.generate-video.outputs.video_url }}
+          
+          以下の観点で分析：
+          1. 画質と技術的品質
+          2. モーションの自然さ
+          3. プロンプトとの一致度
+          4. 改善提案
+          
+          分析結果を保存：
+          - ${{ needs.setup-branch.outputs.folder_name }}/analysis/video-analysis.md
+          EOF
+          
+      - name: Commit analysis
+        run: |
+          git add .
+          git commit -m "📊 Add video analysis"
+          git push
+
+  create-summary:
+    needs: [setup-branch, planning, generate-image, generate-video, analyze-video]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup-branch.outputs.branch_name }}
+          
+      - name: Setup Gemini
+        uses: anthropics/gemini-setup-action@v1
+        with:
+          api-key: ${{ secrets.GEMINI_API_KEY }}
+          
+      - name: Create summary README
+        run: |
+          gemini code --execute << 'EOF'
+          ${{ needs.setup-branch.outputs.folder_name }}/README.mdを更新：
+          
+          # 画像→動画生成結果
+          
+          ## 概要
+          - 基本プロンプト: ${{ github.event.inputs.base_prompt }}
+          - 生成日時: $(date)
+          
+          ## 生成結果
+          - 画像: [generated-image.jpg](images/generated-image.jpg)
+          - 動画: [generated-video.mp4](videos/generated-video.mp4)
+          
+          ## 詳細
+          - [計画戦略](planning/planning-strategy.md)
+          - [画像プロンプト](planning/image-prompt.md)
+          - [動画プロンプト](planning/video-prompt.md)
+          - [動画分析](analysis/video-analysis.md)
+          EOF
+          
+      - name: Commit summary
+        run: |
+          git add .
+          git commit -m "📚 Add workflow summary"
+          git push
+
+  create-pull-request:
+    needs: [setup-branch, create-summary]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup-branch.outputs.branch_name }}
+          
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          branch: ${{ needs.setup-branch.outputs.branch_name }}
+          title: "🎬 画像→動画生成: ${{ github.event.inputs.base_prompt }}"
+          body: |
+            ## 画像→動画生成ワークフロー完了
+            
+            ### 生成内容
+            **基本プロンプト**: ${{ github.event.inputs.base_prompt }}
+            
+            ### 成果物
+            - 📁 **フォルダ**: `${{ needs.setup-branch.outputs.folder_name }}/`
+            - 🖼️ **画像**: 生成完了
+            - 🎥 **動画**: 生成完了
+            - 📊 **分析**: 完了
+            
+            ### 次のステップ
+            1. 生成結果を確認してください
+            2. 必要に応じて再生成を検討してください
+            3. 満足できる結果の場合はマージしてください
+            
+            ---
+            *このPRは自動生成されました*
