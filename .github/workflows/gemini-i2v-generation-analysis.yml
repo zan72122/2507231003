@@ -51,6 +51,10 @@ jobs:
           echo "Created folder: ${{ steps.setup.outputs.folder_name }}"
           git branch -v
           git remote -v
+          
+          # リモートブランチの確認
+          echo "Checking remote branches:"
+          git ls-remote --heads origin | grep "${{ steps.setup.outputs.branch_name }}" || echo "Branch not found on remote"
 
   planning:
     needs: setup-branch
@@ -561,13 +565,28 @@ jobs:
           git log --oneline -n 5
           ls -la ${{ needs.setup-branch.outputs.folder_name }}/ || echo "Folder not found"
           
-      - name: Setup GitHub CLI authentication
+      - name: Verify GitHub token and permissions
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
-          echo "Setting up GitHub CLI authentication..."
-          echo "$GH_TOKEN" | gh auth login --with-token
-          gh auth status
+          echo "Checking GitHub token..."
+          if [ -z "$GH_TOKEN" ]; then
+            echo "Error: No GitHub token found"
+            exit 1
+          fi
+          echo "GitHub token is set (length: ${#GH_TOKEN})"
+          
+          # トークンの種類を確認
+          if [ -n "$PAT_TOKEN" ]; then
+            echo "Using PAT_TOKEN for authentication"
+          else
+            echo "Using GITHUB_TOKEN for authentication"
+            echo "Note: GITHUB_TOKEN may have limited PR creation permissions"
+          fi
+          
+          # リポジトリへのアクセスを確認
+          gh repo view ${{ github.repository }} --json name,owner || echo "Repository access check failed"
           
       - name: Create Pull Request
         env:
@@ -596,13 +615,33 @@ jobs:
           EOF
           
           # プルリクエスト作成
-          gh pr create \
-            --base main \
-            --title "🎬 画像→動画生成: ${{ github.event.inputs.base_prompt }}" \
-            --body-file pr_body.md \
-            --head ${{ needs.setup-branch.outputs.branch_name }} \
-            || echo "プルリクエスト作成に失敗しました。詳細ログを確認してください。"
+          CURRENT_BRANCH=$(git branch --show-current)
+          echo "Creating pull request from branch: $CURRENT_BRANCH to main"
+          
+          # 既存のPRをチェック
+          EXISTING_PR=$(gh pr list --head "$CURRENT_BRANCH" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          
+          if [ -n "$EXISTING_PR" ] && [ "$EXISTING_PR" != "null" ]; then
+            echo "Pull request already exists: #$EXISTING_PR"
+            gh pr view "$EXISTING_PR"
+          else
+            echo "Creating new pull request..."
+            gh pr create \
+              --base main \
+              --title "🎬 画像→動画生成: ${{ github.event.inputs.base_prompt }}" \
+              --body-file pr_body.md \
+              && echo "プルリクエスト作成成功！" \
+              || {
+                echo "プルリクエスト作成に失敗しました"
+                echo "Debug information:"
+                echo "Current branch: $CURRENT_BRANCH"
+                echo "Repository: ${{ github.repository }}"
+                echo "Base branch: main" 
+                gh pr list --limit 5 2>/dev/null || echo "PR list failed"
+                exit 1
+              }
+          fi
           
           # PR URL を表示
           echo "作成されたプルリクエスト:"
-          gh pr list --head ${{ needs.setup-branch.outputs.branch_name }}
+          gh pr list --head $(git branch --show-current)
