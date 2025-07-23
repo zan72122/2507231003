@@ -1,0 +1,1 @@
+A majestic golden retriever running through a sun-dappled meadow, hyperrealistic, 8k, cinematic lighting, detailed fur

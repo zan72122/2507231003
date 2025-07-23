@@ -1,0 +1,1 @@
+A golden retriever running at high speed across a beach, dynamic camera movement, slow motion shots, golden hour lighting,  realistic fur, 4k
