@@ -30,19 +30,40 @@
   - [Google AI Studio](https://makersuite.google.com/app/apikey) から取得
   - Gemini AI へのアクセスに使用
 
-- **PAT_TOKEN** (オプション)
+- **PAT_TOKEN** (推奨)
   - GitHub の Personal Access Token
-  - より高度な GitHub 操作に使用
+  - プルリクエスト作成により確実に動作
+  - **作成手順**:
+    1. GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
+    2. "Generate new token (classic)" をクリック
+    3. **必要なスコープ**を選択:
+       - `repo` (フルリポジトリアクセス)
+       - `workflow` (ワークフロー更新権限)
+    4. トークンをコピーして、リポジトリのシークレットとして設定
 
 #### 2. リポジトリ権限の設定
+
+**重要**: 以下の設定を正確に行ってください。設定が不完全だとワークフローが失敗します。
 
 Settings → Actions → General で以下を設定：
 
 1. **Workflow permissions**
    - "Read and write permissions" を選択
    
-2. **Pull request permissions**
+2. **Pull request permissions** 
    - "Allow GitHub Actions to create and approve pull requests" にチェック
+
+**さらに重要**: Settings → Actions → General の下部で：
+
+3. **Actions permissions**
+   - "Allow all actions and reusable workflows" を選択（または適切な権限を設定）
+   
+4. **Fork pull request workflows**
+   - 必要に応じて設定を調整
+
+**トラブルシューティング**: 
+- プルリクエストが作成されない場合は、上記の設定を再確認してください
+- PAT_TOKEN の使用を推奨します（GITHUB_TOKEN では権限が制限される場合があります）
 
 ## 使用方法
 
@@ -96,19 +117,55 @@ video-[timestamp]/
 
 ## トラブルシューティング
 
-### よくある問題
+### よくある問題と解決方法
 
-1. **ワークフローが失敗する**
-   - シークレットが正しく設定されているか確認
-   - リポジトリ権限が適切に設定されているか確認
+#### 1. ワークフローが失敗する
 
-2. **プルリクエストが作成されない**
-   - Actions の権限設定を再確認
-   - PAT_TOKEN の設定を検討
+**症状**: ワークフローがエラーで停止する
 
-3. **生成結果が期待と異なる**
-   - より具体的なプロンプトを使用
-   - 生成された planning ファイルを確認
+**原因と解決方法**:
+- **GEMINI_API_KEY** が設定されていない → Google AI Studio で API キーを取得
+- リポジトリ権限が不適切 → 上記の「リポジトリ権限の設定」を確認
+- Git 設定エラー → ワークフロー内で自動解決されます
+
+#### 2. プルリクエストが作成されない
+
+**症状**: ワークフローは成功するが、プルリクエストが表示されない
+
+**解決方法**:
+1. **PAT_TOKEN を設定**（最も効果的）:
+   - GitHub の Personal Access Token を生成
+   - `repo` と `workflow` スコープを選択
+   - リポジトリの Secrets に `PAT_TOKEN` として追加
+
+2. **リポジトリ設定を確認**:
+   - Settings → Actions → General
+   - "Allow GitHub Actions to create and approve pull requests" にチェック
+   - "Read and write permissions" を選択
+
+#### 3. GitHub CLI 認証エラー
+
+**症状**: "You are not logged into any GitHub hosts" エラー
+
+**解決方法**:
+- 上記の PAT_TOKEN 設定で解決されます
+- GITHUB_TOKEN の権限制限が原因の場合があります
+
+#### 4. 画像・動画生成エラー
+
+**症状**: API 呼び出しでエラーが発生
+
+**原因と解決方法**:
+- MCP サーバーの一時的な問題 → 再実行を試す
+- プロンプトが不適切 → より具体的で詳細なプロンプトを使用
+- フォールバック機能により、エラー時はプレースホルダーが生成されます
+
+#### 5. 生成結果が期待と異なる
+
+**改善方法**:
+- より具体的なプロンプトを使用（色、スタイル、構図を明記）
+- 生成された `planning/` フォルダの内容を確認
+- `analysis/video-analysis.md` の改善提案を参考にする
 
 ## ライセンス
 
