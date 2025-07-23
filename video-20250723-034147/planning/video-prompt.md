@@ -1,0 +1,1 @@
+A playful golden retriever chasing and fetching a bright red ball across a sun-drenched meadow, dynamic camera angles, slow-motion moments,  cinematic lighting, 4k, 60fps
