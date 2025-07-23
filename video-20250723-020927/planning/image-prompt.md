@@ -1,0 +1,1 @@
+A majestic golden retriever running through a sun-drenched wheat field, cinematic lighting, hyperrealistic, 8k, artstation
