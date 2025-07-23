@@ -550,7 +550,7 @@ jobs:
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
-          branch: ${{ needs.setup-branch.outputs.branch_name }}
+          base: main
           title: "🎬 画像→動画生成: ${{ github.event.inputs.base_prompt }}"
           body: |
             ## 画像→動画生成ワークフロー完了
