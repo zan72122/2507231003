@@ -114,8 +114,13 @@ video-[timestamp]/
 このワークフローは、**Model Context Protocol (MCP)** を使用して複数のAIサービスと統合しています：
 
 - **MCP サーバー**: kamuicode が提供する統合サーバー経由で各種AIモデルにアクセス
-- **Gemini CLI Action**: GitHub Actions内でMCPツールを呼び出すためのインターフェース
+- **Gemini CLI Action**: `google-gemini/gemini-cli-action@main`でMCPツールを呼び出し
+- **設定統合**: ワークフロー内で`settings_json`パラメータを使用してMCPサーバーを設定
 - **自動ファイル管理**: 生成されたコンテンツの自動ダウンロードと保存
+
+**MCPツール呼び出し**: 
+- 画像生成: `mcp__t2i-fal-imagen4-fast` ツール経由でImagen4 Fast
+- 動画生成: `mcp__i2v-fal-hailuo-02-pro` ツール経由でHailuo-02 Pro
 
 ### ジョブの流れ
 
@@ -178,7 +183,7 @@ video-[timestamp]/
 
 **デバッグ方法**:
 - Actions ログで Gemini の詳細なレスポンスを確認
-- `.gemini/settings.json` の MCP サーバー設定を確認
+- ワークフロー内の `settings_json` パラメータでMCPサーバー設定を確認
 - 生成された `videos/generation-error.txt` でエラー詳細を確認
 
 #### 5. 生成結果が期待と異なる
