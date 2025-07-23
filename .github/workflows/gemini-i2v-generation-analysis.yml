@@ -193,91 +193,40 @@ jobs:
         run: |
           pip install requests pillow
           
-      - name: Generate image
+      - name: 🎨 画像生成エージェント (Imagen4 Fast)
         id: generate
-        run: |
-          mkdir -p ${{ needs.setup-branch.outputs.folder_name }}/images
-          
-          python << 'EOF'
-          import requests
-          import json
-          import os
-          import time
-          
-          # MCP Server URL
-          mcp_url = "https://mcp-creatify-lipsync-20250719-010824-a071b7b8-820994673238.us-central1.run.app/t2i/fal/imagen4/fast"
-          
-          prompt = """${{ needs.planning.outputs.image_prompt }}"""
-          
-          # API呼び出し
-          payload = {
-              "prompt": prompt,
-              "image_size": "landscape_16_9",
-              "num_inference_steps": 50,
-              "seed": int(time.time())
-          }
-          
-          try:
-              response = requests.post(
-                  f"{mcp_url}/api/tool/call",
-                  json={
-                      "name": "generate_image",
-                      "arguments": payload
-                  },
-                  headers={"Content-Type": "application/json"},
-                  timeout=300
-              )
-              
-              if response.status_code == 200:
-                  result = response.json()
-                  if "content" in result and len(result["content"]) > 0:
-                      content = result["content"][0]
-                      if "url" in content:
-                          image_url = content["url"]
-                      else:
-                          image_url = content.get("text", "")
-                          # URLを抽出
-                          if "http" in image_url:
-                              import re
-                              urls = re.findall(r'https?://[^\s]+', image_url)
-                              if urls:
-                                  image_url = urls[0]
-                  else:
-                      raise Exception("No content in response")
-              else:
-                  raise Exception(f"API error: {response.status_code}")
-              
-              # 画像をダウンロード
-              img_response = requests.get(image_url, stream=True)
-              if img_response.status_code == 200:
-                  with open("${{ needs.setup-branch.outputs.folder_name }}/images/generated-image.jpg", "wb") as f:
-                      for chunk in img_response.iter_content(chunk_size=8192):
-                          f.write(chunk)
-              
-              # URLを保存
-              with open("${{ needs.setup-branch.outputs.folder_name }}/images/image-url.txt", "w") as f:
-                  f.write(image_url)
-              
-              # GitHub Outputに設定
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write(f"image_url={image_url}\n")
-                  
-          except Exception as e:
-              print(f"Error: {e}")
-              # フォールバック: プレースホルダー画像を作成
-              from PIL import Image, ImageDraw, ImageFont
-              img = Image.new('RGB', (1920, 1080), color='lightblue')
-              draw = ImageDraw.Draw(img)
-              draw.text((50, 50), f"Prompt: {prompt[:100]}...", fill='black')
-              img.save("${{ needs.setup-branch.outputs.folder_name }}/images/generated-image.jpg")
-              
-              placeholder_url = "https://via.placeholder.com/1920x1080"
-              with open("${{ needs.setup-branch.outputs.folder_name }}/images/image-url.txt", "w") as f:
-                  f.write(placeholder_url)
-              
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write(f"image_url={placeholder_url}\n")
-          EOF
+        uses: google-gemini/gemini-cli-action@main
+        with:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          prompt: |
+            📸 **画像生成タスク - Imagen4 Fast エージェント**
+            
+            **プロンプト**: ${{ needs.planning.outputs.image_prompt }}
+            
+            **実行手順**:
+            1. **MCPツールを使用して画像生成**:
+               - ツール: `mcp__t2i-fal-imagen4-fast`
+               - プロンプト: "${{ needs.planning.outputs.image_prompt }}"
+               - 画像サイズ: landscape_16_9
+               - 品質: high
+               
+            2. **結果の保存**:
+               ```
+               write_file(${{ needs.setup-branch.outputs.folder_name }}/images/image-url.txt, 画像URL)
+               ```
+               
+            3. **画像ダウンロード**:
+               ```
+               shell_exec(curl -L -o ${{ needs.setup-branch.outputs.folder_name }}/images/generated-image.jpg "画像URL")
+               ```
+               
+            **重要**: 
+            - MCPツールが返すURLを必ずimage-url.txtに保存
+            - curlで実際の画像ファイルをダウンロード
+            - ファイル名は必ず「generated-image.jpg」を使用
+            
+            **エラー時のフォールバック**:
+            エラーが発生した場合は、プレースホルダー画像を作成し、エラー情報をファイルに保存してください。
           
       - name: Commit image
         run: |
@@ -310,86 +259,44 @@ jobs:
         run: |
           pip install requests pillow
           
-      - name: Generate video
+      - name: 🎬 動画生成エージェント (Hailuo-02 Pro)
         id: generate
-        run: |
-          mkdir -p ${{ needs.setup-branch.outputs.folder_name }}/videos
-          
-          python << 'EOF'
-          import requests
-          import json
-          import os
-          import time
-          
-          # MCP Server URL
-          mcp_url = "https://mcp-creatify-lipsync-20250719-010824-a071b7b8-820994673238.us-central1.run.app/i2v/fal/minimax/hailuo-02/pro"
-          
-          image_url = """${{ needs.generate-image.outputs.image_url }}"""
-          prompt = """${{ needs.planning.outputs.video_prompt }}"""
-          
-          # API呼び出し
-          payload = {
-              "image_url": image_url,
-              "prompt": prompt,
-              "duration": "5",
-              "seed": int(time.time())
-          }
-          
-          try:
-              response = requests.post(
-                  f"{mcp_url}/api/tool/call",
-                  json={
-                      "name": "generate_video",
-                      "arguments": payload
-                  },
-                  headers={"Content-Type": "application/json"},
-                  timeout=600
-              )
-              
-              if response.status_code == 200:
-                  result = response.json()
-                  if "content" in result and len(result["content"]) > 0:
-                      content = result["content"][0]
-                      if "url" in content:
-                          video_url = content["url"]
-                      else:
-                          video_url = content.get("text", "")
-                          # URLを抽出
-                          if "http" in video_url:
-                              import re
-                              urls = re.findall(r'https?://[^\s]+\.mp4', video_url)
-                              if urls:
-                                  video_url = urls[0]
-                  else:
-                      raise Exception("No content in response")
-              else:
-                  raise Exception(f"API error: {response.status_code}")
-              
-              # 動画をダウンロード
-              vid_response = requests.get(video_url, stream=True)
-              if vid_response.status_code == 200:
-                  with open("${{ needs.setup-branch.outputs.folder_name }}/videos/generated-video.mp4", "wb") as f:
-                      for chunk in vid_response.iter_content(chunk_size=8192):
-                          f.write(chunk)
-              
-              # URLを保存
-              with open("${{ needs.setup-branch.outputs.folder_name }}/videos/video-url.txt", "w") as f:
-                  f.write(video_url)
-              
-              # GitHub Outputに設定
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write(f"video_url={video_url}\n")
-                  
-          except Exception as e:
-              print(f"Error: {e}")
-              # フォールバック: プレースホルダー
-              placeholder_url = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-              with open("${{ needs.setup-branch.outputs.folder_name }}/videos/video-url.txt", "w") as f:
-                  f.write(placeholder_url)
-              
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write(f"video_url={placeholder_url}\n")
-          EOF
+        uses: google-gemini/gemini-cli-action@main
+        with:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          prompt: |
+            🎥 **動画生成タスク - Hailuo-02 Pro エージェント**
+            
+            **入力画像URL**: ${{ needs.generate-image.outputs.image_url }}
+            **動画プロンプト**: ${{ needs.planning.outputs.video_prompt }}
+            
+            **実行手順**:
+            1. **MCPツールを使用して動画生成**:
+               - ツール: `mcp__i2v-fal-hailuo-02-pro`
+               - 入力画像: "${{ needs.generate-image.outputs.image_url }}"
+               - プロンプト: "${{ needs.planning.outputs.video_prompt }}"
+               - 長さ: 6秒
+               - 解像度: 1080P
+               - プロンプト最適化: 有効
+               
+            2. **結果の保存**:
+               ```
+               write_file(${{ needs.setup-branch.outputs.folder_name }}/videos/video-url.txt, 動画URL)
+               ```
+               
+            3. **動画ダウンロード**:
+               ```
+               shell_exec(curl -L -o ${{ needs.setup-branch.outputs.folder_name }}/videos/generated-video.mp4 "動画URL")
+               ```
+               
+            **重要**: 
+            - MCPツールが返すURLを必ずvideo-url.txtに保存
+            - curlで実際の動画ファイルをダウンロード
+            - ファイル名は必ず「generated-video.mp4」を使用
+            - 動画生成には時間がかかる場合があります（最大10分）
+            
+            **エラー時のフォールバック**:
+            エラーが発生した場合は、プレースホルダー動画URLを保存し、エラー情報をgeneration-error.txtに記録してください。
           
       - name: Commit video
         run: |

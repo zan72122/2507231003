@@ -28,7 +28,11 @@
 
 - **GEMINI_API_KEY** (必須)
   - [Google AI Studio](https://makersuite.google.com/app/apikey) から取得
-  - Gemini AI へのアクセスに使用
+  - Gemini AI と MCP サーバーへのアクセスに使用
+  - **取得手順**:
+    1. https://makersuite.google.com/app/apikey にアクセス
+    2. "Create API key" をクリック
+    3. API キーをコピーして、リポジトリの Secrets に `GEMINI_API_KEY` として追加
 
 - **PAT_TOKEN** (推奨)
   - GitHub の Personal Access Token
@@ -101,9 +105,17 @@ video-[timestamp]/
 
 ### 使用する AI モデル
 
-- **Gemini AI**: プロンプト最適化と動画分析
-- **Imagen4 Fast**: 高速な画像生成
-- **Hailuo-02 Pro**: プロフェッショナルな動画生成
+- **Gemini AI**: プロンプト最適化、動画分析、MCPサーバー統合
+- **Imagen4 Fast**: 高速な画像生成（MCP サーバー経由）
+- **Hailuo-02 Pro**: プロフェッショナルな動画生成（MCP サーバー経由）
+
+### MCP (Model Context Protocol) 統合
+
+このワークフローは、**Model Context Protocol (MCP)** を使用して複数のAIサービスと統合しています：
+
+- **MCP サーバー**: kamuicode が提供する統合サーバー経由で各種AIモデルにアクセス
+- **Gemini CLI Action**: GitHub Actions内でMCPツールを呼び出すためのインターフェース
+- **自動ファイル管理**: 生成されたコンテンツの自動ダウンロードと保存
 
 ### ジョブの流れ
 
@@ -153,12 +165,21 @@ video-[timestamp]/
 
 #### 4. 画像・動画生成エラー
 
-**症状**: API 呼び出しでエラーが発生
+**症状**: MCP サーバー経由での画像・動画生成でエラーが発生
 
 **原因と解決方法**:
-- MCP サーバーの一時的な問題 → 再実行を試す
-- プロンプトが不適切 → より具体的で詳細なプロンプトを使用
-- フォールバック機能により、エラー時はプレースホルダーが生成されます
+- **GEMINI_API_KEY の権限不足**:
+  - Google AI Studio でAPI制限を確認
+  - 必要に応じて課金設定を確認
+- **MCP サーバーの一時的な問題** → 再実行を試す
+- **プロンプトが不適切** → より具体的で詳細なプロンプトを使用
+- **画像形式の問題**（動画生成時）→ 画像生成が成功していることを確認
+- **フォールバック機能**により、エラー時はプレースホルダーが生成されます
+
+**デバッグ方法**:
+- Actions ログで Gemini の詳細なレスポンスを確認
+- `.gemini/settings.json` の MCP サーバー設定を確認
+- 生成された `videos/generation-error.txt` でエラー詳細を確認
 
 #### 5. 生成結果が期待と異なる
 
