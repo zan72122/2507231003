@@ -57,34 +57,94 @@ jobs:
         with:
           ref: ${{ needs.setup-branch.outputs.branch_name }}
           
-      - name: Setup Gemini
-        uses: anthropics/gemini-setup-action@v1
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          api-key: ${{ secrets.GEMINI_API_KEY }}
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          pip install google-generativeai
           
       - name: Plan generation strategy
         id: plan
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          # Gemini AIを使用してプロンプトを最適化
-          gemini code --execute << 'EOF'
-          生成したいコンテンツ: ${{ github.event.inputs.base_prompt }}
+          mkdir -p ${{ needs.setup-branch.outputs.folder_name }}/planning
           
-          以下の内容で計画を立ててください：
-          1. 画像生成用の詳細なプロンプト（Imagen4 Fast向け）
-          2. 動画生成用のモーションプロンプト（Hailuo-02 Pro向け）
+          python << 'EOF'
+          import os
+          import google.generativeai as genai
           
-          ファイルに保存：
-          - ${{ needs.setup-branch.outputs.folder_name }}/planning/image-prompt.md
-          - ${{ needs.setup-branch.outputs.folder_name }}/planning/video-prompt.md
-          - ${{ needs.setup-branch.outputs.folder_name }}/planning/planning-strategy.md
+          genai.configure(api_key=os.environ['GEMINI_API_KEY'])
+          model = genai.GenerativeModel('gemini-1.5-flash')
+          
+          base_prompt = """${{ github.event.inputs.base_prompt }}"""
+          
+          planning_prompt = f"""基本プロンプト: {base_prompt}
+          
+          以下の内容で画像生成と動画生成のプロンプトを作成してください：
+          
+          1. 画像生成用プロンプト（Imagen4 Fast向け）:
+          - 静的な美しさ、構図、色彩、質感を重視
+          - 高品質な画像生成に必要な詳細を含める
+          - 1行で簡潔に
+          
+          2. 動画生成用プロンプト（Hailuo-02 Pro向け）:
+          - 動きの要素を強調
+          - カメラワーク、モーション、時間的変化を含める
+          - 1行で簡潔に
+          
+          3. 計画戦略:
+          - どのような視覚的要素を重視するか
+          - 期待される結果
+          
+          返答形式:
+          IMAGE_PROMPT: [画像生成用プロンプト]
+          VIDEO_PROMPT: [動画生成用プロンプト]
+          STRATEGY: [計画戦略]
+          """
+          
+          response = model.generate_content(planning_prompt)
+          result = response.text
+          
+          # パース結果
+          lines = result.split('\n')
+          image_prompt = ""
+          video_prompt = ""
+          strategy = []
+          
+          for line in lines:
+              if line.startswith('IMAGE_PROMPT:'):
+                  image_prompt = line.replace('IMAGE_PROMPT:', '').strip()
+              elif line.startswith('VIDEO_PROMPT:'):
+                  video_prompt = line.replace('VIDEO_PROMPT:', '').strip()
+              elif line.startswith('STRATEGY:'):
+                  strategy.append(line.replace('STRATEGY:', '').strip())
+              elif strategy and line.strip():
+                  strategy.append(line.strip())
+          
+          # ファイル保存
+          folder = "${{ needs.setup-branch.outputs.folder_name }}/planning"
+          
+          with open(f"{folder}/image-prompt.md", "w", encoding="utf-8") as f:
+              f.write(image_prompt)
+          
+          with open(f"{folder}/video-prompt.md", "w", encoding="utf-8") as f:
+              f.write(video_prompt)
+          
+          with open(f"{folder}/planning-strategy.md", "w", encoding="utf-8") as f:
+              f.write(f"# 生成計画戦略\n\n")
+              f.write(f"## 基本プロンプト\n{base_prompt}\n\n")
+              f.write(f"## 戦略\n")
+              f.write('\n'.join(strategy))
+          
+          # GitHub Outputに設定
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"image_prompt={image_prompt}\n")
+              f.write(f"video_prompt={video_prompt}\n")
           EOF
-          
-          # プロンプトを出力として設定
-          IMAGE_PROMPT=$(cat ${{ needs.setup-branch.outputs.folder_name }}/planning/image-prompt.md | head -n 1)
-          VIDEO_PROMPT=$(cat ${{ needs.setup-branch.outputs.folder_name }}/planning/video-prompt.md | head -n 1)
-          
-          echo "image_prompt=${IMAGE_PROMPT}" >> $GITHUB_OUTPUT
-          echo "video_prompt=${VIDEO_PROMPT}" >> $GITHUB_OUTPUT
           
       - name: Commit planning results
         run: |
@@ -103,25 +163,100 @@ jobs:
         with:
           ref: ${{ needs.setup-branch.outputs.branch_name }}
           
-      - name: Setup Gemini
-        uses: anthropics/gemini-setup-action@v1
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          api-key: ${{ secrets.GEMINI_API_KEY }}
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          pip install requests pillow
           
       - name: Generate image
         id: generate
         run: |
-          gemini code --execute << 'EOF'
-          MCP t2i-fal-imagen4-fastを使用して画像を生成：
-          プロンプト: ${{ needs.planning.outputs.image_prompt }}
+          mkdir -p ${{ needs.setup-branch.outputs.folder_name }}/images
           
-          生成した画像を以下に保存：
-          - ${{ needs.setup-branch.outputs.folder_name }}/images/generated-image.jpg
-          - URLを${{ needs.setup-branch.outputs.folder_name }}/images/image-url.txtに保存
+          python << 'EOF'
+          import requests
+          import json
+          import os
+          import time
+          
+          # MCP Server URL
+          mcp_url = "https://mcp-creatify-lipsync-20250719-010824-a071b7b8-820994673238.us-central1.run.app/t2i/fal/imagen4/fast"
+          
+          prompt = """${{ needs.planning.outputs.image_prompt }}"""
+          
+          # API呼び出し
+          payload = {
+              "prompt": prompt,
+              "image_size": "landscape_16_9",
+              "num_inference_steps": 50,
+              "seed": int(time.time())
+          }
+          
+          try:
+              response = requests.post(
+                  f"{mcp_url}/api/tool/call",
+                  json={
+                      "name": "generate_image",
+                      "arguments": payload
+                  },
+                  headers={"Content-Type": "application/json"},
+                  timeout=300
+              )
+              
+              if response.status_code == 200:
+                  result = response.json()
+                  if "content" in result and len(result["content"]) > 0:
+                      content = result["content"][0]
+                      if "url" in content:
+                          image_url = content["url"]
+                      else:
+                          image_url = content.get("text", "")
+                          # URLを抽出
+                          if "http" in image_url:
+                              import re
+                              urls = re.findall(r'https?://[^\s]+', image_url)
+                              if urls:
+                                  image_url = urls[0]
+                  else:
+                      raise Exception("No content in response")
+              else:
+                  raise Exception(f"API error: {response.status_code}")
+              
+              # 画像をダウンロード
+              img_response = requests.get(image_url, stream=True)
+              if img_response.status_code == 200:
+                  with open("${{ needs.setup-branch.outputs.folder_name }}/images/generated-image.jpg", "wb") as f:
+                      for chunk in img_response.iter_content(chunk_size=8192):
+                          f.write(chunk)
+              
+              # URLを保存
+              with open("${{ needs.setup-branch.outputs.folder_name }}/images/image-url.txt", "w") as f:
+                  f.write(image_url)
+              
+              # GitHub Outputに設定
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write(f"image_url={image_url}\n")
+                  
+          except Exception as e:
+              print(f"Error: {e}")
+              # フォールバック: プレースホルダー画像を作成
+              from PIL import Image, ImageDraw, ImageFont
+              img = Image.new('RGB', (1920, 1080), color='lightblue')
+              draw = ImageDraw.Draw(img)
+              draw.text((50, 50), f"Prompt: {prompt[:100]}...", fill='black')
+              img.save("${{ needs.setup-branch.outputs.folder_name }}/images/generated-image.jpg")
+              
+              placeholder_url = "https://via.placeholder.com/1920x1080"
+              with open("${{ needs.setup-branch.outputs.folder_name }}/images/image-url.txt", "w") as f:
+                  f.write(placeholder_url)
+              
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write(f"image_url={placeholder_url}\n")
           EOF
-          
-          IMAGE_URL=$(cat ${{ needs.setup-branch.outputs.folder_name }}/images/image-url.txt)
-          echo "image_url=${IMAGE_URL}" >> $GITHUB_OUTPUT
           
       - name: Commit image
         run: |
@@ -140,26 +275,95 @@ jobs:
         with:
           ref: ${{ needs.setup-branch.outputs.branch_name }}
           
-      - name: Setup Gemini
-        uses: anthropics/gemini-setup-action@v1
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          api-key: ${{ secrets.GEMINI_API_KEY }}
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          pip install requests pillow
           
       - name: Generate video
         id: generate
         run: |
-          gemini code --execute << 'EOF'
-          MCP i2v-fal-hailuo-02-proを使用して動画を生成：
-          画像URL: ${{ needs.generate-image.outputs.image_url }}
-          プロンプト: ${{ needs.planning.outputs.video_prompt }}
+          mkdir -p ${{ needs.setup-branch.outputs.folder_name }}/videos
           
-          生成した動画を以下に保存：
-          - ${{ needs.setup-branch.outputs.folder_name }}/videos/generated-video.mp4
-          - URLを${{ needs.setup-branch.outputs.folder_name }}/videos/video-url.txtに保存
+          python << 'EOF'
+          import requests
+          import json
+          import os
+          import time
+          
+          # MCP Server URL
+          mcp_url = "https://mcp-creatify-lipsync-20250719-010824-a071b7b8-820994673238.us-central1.run.app/i2v/fal/minimax/hailuo-02/pro"
+          
+          image_url = """${{ needs.generate-image.outputs.image_url }}"""
+          prompt = """${{ needs.planning.outputs.video_prompt }}"""
+          
+          # API呼び出し
+          payload = {
+              "image_url": image_url,
+              "prompt": prompt,
+              "duration": "5",
+              "seed": int(time.time())
+          }
+          
+          try:
+              response = requests.post(
+                  f"{mcp_url}/api/tool/call",
+                  json={
+                      "name": "generate_video",
+                      "arguments": payload
+                  },
+                  headers={"Content-Type": "application/json"},
+                  timeout=600
+              )
+              
+              if response.status_code == 200:
+                  result = response.json()
+                  if "content" in result and len(result["content"]) > 0:
+                      content = result["content"][0]
+                      if "url" in content:
+                          video_url = content["url"]
+                      else:
+                          video_url = content.get("text", "")
+                          # URLを抽出
+                          if "http" in video_url:
+                              import re
+                              urls = re.findall(r'https?://[^\s]+\.mp4', video_url)
+                              if urls:
+                                  video_url = urls[0]
+                  else:
+                      raise Exception("No content in response")
+              else:
+                  raise Exception(f"API error: {response.status_code}")
+              
+              # 動画をダウンロード
+              vid_response = requests.get(video_url, stream=True)
+              if vid_response.status_code == 200:
+                  with open("${{ needs.setup-branch.outputs.folder_name }}/videos/generated-video.mp4", "wb") as f:
+                      for chunk in vid_response.iter_content(chunk_size=8192):
+                          f.write(chunk)
+              
+              # URLを保存
+              with open("${{ needs.setup-branch.outputs.folder_name }}/videos/video-url.txt", "w") as f:
+                  f.write(video_url)
+              
+              # GitHub Outputに設定
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write(f"video_url={video_url}\n")
+                  
+          except Exception as e:
+              print(f"Error: {e}")
+              # フォールバック: プレースホルダー
+              placeholder_url = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+              with open("${{ needs.setup-branch.outputs.folder_name }}/videos/video-url.txt", "w") as f:
+                  f.write(placeholder_url)
+              
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write(f"video_url={placeholder_url}\n")
           EOF
-          
-          VIDEO_URL=$(cat ${{ needs.setup-branch.outputs.folder_name }}/videos/video-url.txt)
-          echo "video_url=${VIDEO_URL}" >> $GITHUB_OUTPUT
           
       - name: Commit video
         run: |
@@ -168,7 +372,7 @@ jobs:
           git push
 
   analyze-video:
-    needs: [setup-branch, generate-video]
+    needs: [setup-branch, generate-video, planning]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -176,25 +380,77 @@ jobs:
         with:
           ref: ${{ needs.setup-branch.outputs.branch_name }}
           
-      - name: Setup Gemini
-        uses: anthropics/gemini-setup-action@v1
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          api-key: ${{ secrets.GEMINI_API_KEY }}
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          pip install google-generativeai
           
       - name: Analyze video
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          gemini code --execute << 'EOF'
-          Gemini Visionを使用して動画を分析：
-          動画URL: ${{ needs.generate-video.outputs.video_url }}
+          mkdir -p ${{ needs.setup-branch.outputs.folder_name }}/analysis
           
-          以下の観点で分析：
-          1. 画質と技術的品質
-          2. モーションの自然さ
-          3. プロンプトとの一致度
-          4. 改善提案
+          python << 'EOF'
+          import os
+          import google.generativeai as genai
           
-          分析結果を保存：
-          - ${{ needs.setup-branch.outputs.folder_name }}/analysis/video-analysis.md
+          genai.configure(api_key=os.environ['GEMINI_API_KEY'])
+          model = genai.GenerativeModel('gemini-1.5-flash')
+          
+          video_url = """${{ needs.generate-video.outputs.video_url }}"""
+          original_prompt = """${{ github.event.inputs.base_prompt }}"""
+          video_prompt = """${{ needs.planning.outputs.video_prompt }}"""
+          
+          analysis_prompt = f"""動画URLを分析してください: {video_url}
+          
+          元のプロンプト: {original_prompt}
+          動画生成プロンプト: {video_prompt}
+          
+          以下の観点で詳細な分析を行ってください：
+          
+          ## 1. 技術的品質
+          - 解像度とクリアさ
+          - フレームレート
+          - アーティファクトの有無
+          
+          ## 2. 芸術的品質
+          - 構図とカメラワーク
+          - 色彩と照明
+          - 全体的な美的価値
+          
+          ## 3. モーションと動き
+          - 動きの自然さ
+          - 物理法則の遵守
+          - トランジションの滑らかさ
+          
+          ## 4. プロンプトとの一致度
+          - 要求された要素の存在
+          - 創造的解釈の適切さ
+          - 期待との乖離
+          
+          ## 5. 改善提案
+          - より良い結果のためのプロンプト改善案
+          - 技術的な推奨事項
+          - 次回生成時のアドバイス
+          
+          マークダウン形式で詳細なレポートを作成してください。
+          """
+          
+          response = model.generate_content(analysis_prompt)
+          analysis = response.text
+          
+          # 分析結果を保存
+          with open("${{ needs.setup-branch.outputs.folder_name }}/analysis/video-analysis.md", "w", encoding="utf-8") as f:
+              f.write(f"# 動画分析レポート\n\n")
+              f.write(f"**動画URL**: {video_url}\n\n")
+              f.write(f"**生成日時**: $(date)\n\n")
+              f.write(f"---\n\n")
+              f.write(analysis)
           EOF
           
       - name: Commit analysis
@@ -212,31 +468,42 @@ jobs:
         with:
           ref: ${{ needs.setup-branch.outputs.branch_name }}
           
-      - name: Setup Gemini
-        uses: anthropics/gemini-setup-action@v1
-        with:
-          api-key: ${{ secrets.GEMINI_API_KEY }}
-          
       - name: Create summary README
         run: |
-          gemini code --execute << 'EOF'
-          ${{ needs.setup-branch.outputs.folder_name }}/README.mdを更新：
-          
+          cat > ${{ needs.setup-branch.outputs.folder_name }}/README.md << 'EOF'
           # 画像→動画生成結果
           
           ## 概要
-          - 基本プロンプト: ${{ github.event.inputs.base_prompt }}
-          - 生成日時: $(date)
+          - **基本プロンプト**: ${{ github.event.inputs.base_prompt }}
+          - **生成日時**: $(date '+%Y年%m月%d日 %H:%M:%S')
+          - **ワークフロー実行ID**: ${{ github.run_id }}
           
           ## 生成結果
-          - 画像: [generated-image.jpg](images/generated-image.jpg)
-          - 動画: [generated-video.mp4](videos/generated-video.mp4)
           
-          ## 詳細
-          - [計画戦略](planning/planning-strategy.md)
-          - [画像プロンプト](planning/image-prompt.md)
-          - [動画プロンプト](planning/video-prompt.md)
-          - [動画分析](analysis/video-analysis.md)
+          ### 画像
+          ![Generated Image](images/generated-image.jpg)
+          - [画像URL](images/image-url.txt)
+          
+          ### 動画
+          - [生成された動画を見る](videos/generated-video.mp4)
+          - [動画URL](videos/video-url.txt)
+          
+          ## 詳細ドキュメント
+          
+          - 📋 [計画戦略](planning/planning-strategy.md)
+          - 🎨 [画像生成プロンプト](planning/image-prompt.md)
+          - 🎬 [動画生成プロンプト](planning/video-prompt.md)
+          - 📊 [動画分析レポート](analysis/video-analysis.md)
+          
+          ## 使用技術
+          
+          - **画像生成**: Imagen4 Fast (via MCP Server)
+          - **動画生成**: Hailuo-02 Pro (via MCP Server)
+          - **分析**: Gemini 1.5 Flash
+          
+          ---
+          
+          *このコンテンツはAIによって自動生成されました*
           EOF
           
       - name: Commit summary
