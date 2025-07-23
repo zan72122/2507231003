@@ -1,0 +1,1 @@
+A playful tabby cat sprinting across a lush green lawn, dynamic camera movement, slow-motion bursts, shallow depth of field, realistic fur, 4k, 60fps
