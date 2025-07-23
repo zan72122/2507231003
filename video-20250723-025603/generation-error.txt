@@ -1,0 +1,5 @@
+Video generation failed.
+
+Errors encountered:
+1. The `read_file` tool failed with the error: "Tool mcp__t2i-fal-imagen4-fast not available.". This prevented reading the input image URL.
+2. The `run_shell_command` tool failed to execute the video generation command `mcp__i2v-fal-hailuo-02-pro`. The error was: "bash: line 1: mcp__i2v-fal-hailuo-02-pro: command not found". This indicates the required tool is not available in the environment.
