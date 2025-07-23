@@ -57,6 +57,11 @@ jobs:
         with:
           ref: ${{ needs.setup-branch.outputs.branch_name }}
           
+      - name: Setup Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
@@ -162,6 +167,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.setup-branch.outputs.branch_name }}
+          
+      - name: Setup Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -275,6 +285,11 @@ jobs:
         with:
           ref: ${{ needs.setup-branch.outputs.branch_name }}
           
+      - name: Setup Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
@@ -380,6 +395,11 @@ jobs:
         with:
           ref: ${{ needs.setup-branch.outputs.branch_name }}
           
+      - name: Setup Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
@@ -467,6 +487,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.setup-branch.outputs.branch_name }}
+          
+      - name: Setup Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
       - name: Create summary README
         run: |
