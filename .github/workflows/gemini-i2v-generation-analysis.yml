@@ -44,6 +44,13 @@ jobs:
           git add .
           git commit -m "🎬 Initialize video generation workflow"
           git push origin ${{ steps.setup.outputs.branch_name }}
+          
+      - name: Verify branch creation
+        run: |
+          echo "Created branch: ${{ steps.setup.outputs.branch_name }}"
+          echo "Created folder: ${{ steps.setup.outputs.folder_name }}"
+          git branch -v
+          git remote -v
 
   planning:
     needs: setup-branch
@@ -546,28 +553,53 @@ jobs:
         with:
           ref: ${{ needs.setup-branch.outputs.branch_name }}
           
+      - name: Debug branch information
+        run: |
+          echo "Current branch: $(git branch --show-current)"
+          echo "Target branch: ${{ needs.setup-branch.outputs.branch_name }}"
+          echo "Folder: ${{ needs.setup-branch.outputs.folder_name }}"
+          git log --oneline -n 5
+          ls -la ${{ needs.setup-branch.outputs.folder_name }}/ || echo "Folder not found"
+          
+      - name: Check GitHub CLI
+        run: |
+          gh version
+          gh auth status
+          
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
-          base: main
-          title: "🎬 画像→動画生成: ${{ github.event.inputs.base_prompt }}"
-          body: |
-            ## 画像→動画生成ワークフロー完了
-            
-            ### 生成内容
-            **基本プロンプト**: ${{ github.event.inputs.base_prompt }}
-            
-            ### 成果物
-            - 📁 **フォルダ**: `${{ needs.setup-branch.outputs.folder_name }}/`
-            - 🖼️ **画像**: 生成完了
-            - 🎥 **動画**: 生成完了
-            - 📊 **分析**: 完了
-            
-            ### 次のステップ
-            1. 生成結果を確認してください
-            2. 必要に応じて再生成を検討してください
-            3. 満足できる結果の場合はマージしてください
-            
-            ---
-            *このPRは自動生成されました*
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          # PRボディを作成
+          cat > pr_body.md << 'EOF'
+          ## 画像→動画生成ワークフロー完了
+          
+          ### 生成内容
+          **基本プロンプト**: ${{ github.event.inputs.base_prompt }}
+          
+          ### 成果物
+          - 📁 **フォルダ**: `${{ needs.setup-branch.outputs.folder_name }}/`
+          - 🖼️ **画像**: 生成完了
+          - 🎥 **動画**: 生成完了
+          - 📊 **分析**: 完了
+          
+          ### 次のステップ
+          1. 生成結果を確認してください
+          2. 必要に応じて再生成を検討してください
+          3. 満足できる結果の場合はマージしてください
+          
+          ---
+          *このPRは自動生成されました*
+          EOF
+          
+          # プルリクエスト作成
+          gh pr create \
+            --base main \
+            --title "🎬 画像→動画生成: ${{ github.event.inputs.base_prompt }}" \
+            --body-file pr_body.md \
+            --head ${{ needs.setup-branch.outputs.branch_name }} \
+            || echo "プルリクエスト作成に失敗しました。詳細ログを確認してください。"
+          
+          # PR URL を表示
+          echo "作成されたプルリクエスト:"
+          gh pr list --head ${{ needs.setup-branch.outputs.branch_name }}
