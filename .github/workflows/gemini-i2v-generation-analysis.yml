@@ -561,9 +561,12 @@ jobs:
           git log --oneline -n 5
           ls -la ${{ needs.setup-branch.outputs.folder_name }}/ || echo "Folder not found"
           
-      - name: Check GitHub CLI
+      - name: Setup GitHub CLI authentication
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          gh version
+          echo "Setting up GitHub CLI authentication..."
+          echo "$GH_TOKEN" | gh auth login --with-token
           gh auth status
           
       - name: Create Pull Request
