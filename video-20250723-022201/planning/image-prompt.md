@@ -1,0 +1,1 @@
+A golden retriever playing fetch in a sun-drenched meadow, photorealistic, 8k, intricate details, vibrant colors, shallow depth of field
