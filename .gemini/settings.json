@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "i2v-fal-hailuo-02-pro": {
+      "httpUrl": "https://mcp-creatify-lipsync-20250719-010824-a071b7b8-820994673238.us-central1.run.app/i2v/fal/minimax/hailuo-02/pro",
+      "timeout": 600000
+    }
+  },
+  "coreTools": ["ReadFileTool", "WriteFileTool", "EditFileTool", "ShellTool"]
+}
+

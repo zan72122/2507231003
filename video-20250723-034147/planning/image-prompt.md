@@ -1,0 +1,1 @@
+A golden retriever playfully fetching a bright red ball in a sun-drenched meadow, hyperrealistic, 8k, artstation, cinematic lighting
