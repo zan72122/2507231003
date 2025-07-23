@@ -1,0 +1,1 @@
+A golden retriever running across a beach at sunset, dynamic camera movement, slow-motion sections, realistic fur, cinematic lighting, 4k, 60fps
