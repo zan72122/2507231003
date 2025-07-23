@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "t2i-fal-imagen4-fast": {
+      "httpUrl": "https://mcp-creatify-lipsync-20250719-010824-a071b7b8-820994673238.us-central1.run.app/t2i/fal/imagen4/fast",
+      "timeout": 300000
+    }
+  },
+  "coreTools": ["ReadFileTool", "WriteFileTool", "EditFileTool", "ShellTool"]
+}
+
